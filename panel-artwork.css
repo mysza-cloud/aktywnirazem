@@ -1,0 +1,11 @@
+/* Wspólna, nieinteraktywna ilustracja; kolor pochodzi z aktywnego motywu. */
+:is(.panel,dialog,.stat,.hub-counts>button,.empty,.about-steps article,.hub-friends article,.card-body,.calendar-surface){position:relative;isolation:isolate}
+:is(.panel,dialog,.stat,.hub-counts>button,.empty,.about-steps article,.hub-friends article,.card-body,.calendar-surface)::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;background:var(--theme-ink,#082d43);opacity:.065;-webkit-mask:url("assets/panel-activity-lines.svg") right bottom/420px 315px no-repeat;mask:url("assets/panel-activity-lines.svg") right bottom/420px 315px no-repeat}
+:root[data-theme] :is(.panel,dialog,.stat,.hub-counts>button,.empty,.about-steps article,.hub-friends article,.card-body){background-image:linear-gradient(125deg,transparent 45%,color-mix(in srgb,var(--theme-accent,#26daf3) 6%,transparent))!important}
+dialog::before{opacity:.08;mask-size:350px 263px;-webkit-mask-size:350px 263px}
+.stat::before,.hub-counts>button::before,.about-steps article::before,.hub-friends article::before{mask-size:210px 158px;-webkit-mask-size:210px 158px;opacity:.045}
+.card-body::before{opacity:.045;mask-size:260px 195px;-webkit-mask-size:260px 195px}
+.calendar-surface::before{opacity:.055}
+#createForm::before{mask-position:right top;-webkit-mask-position:right top;mask-size:480px 360px;-webkit-mask-size:480px 360px}
+@media(max-width:600px){:is(.panel,dialog,.empty)::before{mask-size:290px 218px;-webkit-mask-size:290px 218px;opacity:.05}#createForm::before{mask-size:310px 233px;-webkit-mask-size:310px 233px}}
+@media(forced-colors:active){:is(.panel,dialog,.stat,.hub-counts>button,.empty,.about-steps article,.hub-friends article,.card-body,.calendar-surface)::before{display:none}}

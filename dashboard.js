@@ -1,0 +1,55 @@
+// Osobiste centrum makiety. Lista znajomych i avatar pozostają na tym urządzeniu.
+const hubKey='aktywni-atlas-hub',hubAvatars=['AR','⚽','🚲','🌿','🎾','☕'];
+let hubState={avatar:'AR',photo:'',friends:[]},hubTab='overview',hubPhotoRequest=0;
+function validHubPhoto(value){return typeof value==='string'&&value.length<=400000&&/^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/.test(value)}
+try{const stored=JSON.parse(localStorage.getItem(hubKey));if(stored&&typeof stored==='object'){if(hubAvatars.includes(stored.avatar))hubState.avatar=stored.avatar;if(validHubPhoto(stored.photo))hubState.photo=stored.photo;if(Array.isArray(stored.friends))hubState.friends=stored.friends.filter(x=>typeof x==='string'&&x.trim()&&x.length<=40).slice(0,30)}}catch{}
+function saveHub(){try{localStorage.setItem(hubKey,JSON.stringify(hubState));return true}catch{notice('Nie udało się zapisać ustawień pulpitu. Zmiany mogą zniknąć po odświeżeniu.');return false}}
+function openHub(tab='overview'){hubTab=['overview','organize','joined','friends','profile','chats','favorites','notifications'].includes(tab)?tab:'overview';go('Pulpit')}
+function setHubAvatar(value){if(!hubAvatars.includes(value))return;hubPhotoRequest++;hubState.avatar=value;hubState.photo='';saveHub();render()}
+function hubAvatarMarkup(){return hubState.photo?`<img src="${esc(hubState.photo)}" alt="Twoje zdjęcie profilowe">`:esc(hubState.avatar==='AR'?data.profile.name.slice(0,2).toUpperCase():hubState.avatar)}
+function removeHubPhoto(){hubPhotoRequest++;hubState.photo='';saveHub();render();notice('Usunięto zdjęcie z profilu lokalnego.')}
+async function uploadHubPhoto(input){
+ const file=input.files?.[0];if(!file)return;const request=++hubPhotoRequest;
+ const error=message=>{const output=$('#hubPhotoStatus');if(output)output.textContent=message;input.value=''};
+ if(!['image/jpeg','image/png','image/webp'].includes(file.type))return error('Wybierz zdjęcie JPG, PNG lub WebP.');
+ if(file.size>3*1024*1024)return error('Zdjęcie jest za duże. Maksymalny rozmiar to 3 MB.');
+ let bitmap;
+ try{
+  bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});
+  if(!bitmap.width||!bitmap.height||bitmap.width>12000||bitmap.height>12000)throw new Error('dimensions');
+  const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;
+  const context=canvas.getContext('2d');context.fillStyle='#ffffff';context.fillRect(0,0,256,256);
+  const side=Math.min(bitmap.width,bitmap.height);context.drawImage(bitmap,(bitmap.width-side)/2,(bitmap.height-side)/2,side,side,0,0,256,256);
+  const photo=canvas.toDataURL('image/jpeg',0.85);if(!validHubPhoto(photo))throw new Error('image');
+  if(request!==hubPhotoRequest||!data.profile)return;
+  hubState.photo=photo;const saved=saveHub();render();if(saved)notice('Zdjęcie zapisane w tej przeglądarce. Nic nie wysłano.');
+ }catch{error('Nie udało się odczytać zdjęcia. Wybierz poprawny plik JPG, PNG lub WebP.')}finally{bitmap?.close()}
+}
+function removeHubFriend(index){if(!Number.isInteger(index)||index<0||index>=hubState.friends.length)return;hubState.friends.splice(index,1);saveHub();render()}
+function hubEvents(events,empty){return events.length?events.map(row).join(''):`<div class="hub-empty"><span aria-hidden="true">✳</span><p>${empty}</p><button onclick="go('Odkrywaj')">Odkrywaj spotkania →</button></div>`}
+function hubList(events,title,empty){return `<section class="panel hub-list"><h2>${title}</h2>${hubEvents(events,empty)}</section>`}
+function hubFriends(){return `<section class="panel hub-list"><h2>Znajomi</h2><p class="note">Twoja lokalna lista do testowania. Wpisuj fikcyjne imiona. Dodanie osoby nie oznacza nawiązania znajomości ani wysłania zaproszenia.</p><form id="hubFriendForm" class="hub-friend-form"><label>Imię demonstracyjne<input name="friend" required maxlength="40" placeholder="Np. Alex demo"></label><button class="primary">Dodaj do listy demo</button></form><p id="hubFriendError" role="alert"></p><div class="hub-friends">${hubState.friends.map((name,i)=>`<article><span class="hub-friend-avatar" aria-hidden="true">${esc(name.slice(0,1).toUpperCase())}</span><div><strong>${esc(name)}</strong><small>Kontakt demonstracyjny</small></div><button aria-label="Usuń ${esc(name)} z listy" onclick="removeHubFriend(${i})">Usuń</button></article>`).join('')||'<p>Lista jest pusta. Dodaj fikcyjny kontakt, aby sprawdzić ten widok.</p>'}</div></section>`}
+function hubProfile(){return `<section class="panel hub-list"><h2>Twój profil i avatar</h2><div class="hub-photo-settings"><div class="hub-avatar hub-photo-preview">${hubAvatarMarkup()}</div><div><label>Dodaj swoje zdjęcie<input id="hubAvatarUpload" type="file" accept="image/jpeg,image/png,image/webp" onchange="uploadHubPhoto(this)"></label><p class="helper">JPG, PNG lub WebP, maks. 3 MB. Kwadratowy kadr ze środka zdjęcia. Zdjęcie zapisujemy tylko w tej przeglądarce; możesz je usunąć.</p>${hubState.photo?'<button onclick="removeHubPhoto()">Usuń zdjęcie</button>':''}</div></div><p id="hubPhotoStatus" role="status"></p><p class="note">Możesz też wybrać symbol zamiast zdjęcia.</p><div class="hub-avatar-options" role="group" aria-label="Wybierz avatar">${hubAvatars.map(a=>`<button aria-label="Avatar ${a}" aria-pressed="${!hubState.photo&&hubState.avatar===a}" onclick="setHubAvatar('${a}')">${a}</button>`).join('')}</div><form id="profileForm"><label>Nazwa wyświetlana<input name="name" required maxlength="40" value="${esc(data.profile.name)}"></label><label>Miejscowość<select name="town">${towns.map(t=>`<option ${data.profile.town===t?'selected':''}>${t}</option>`).join('')}</select></label><p class="status">${data.verified?'Profil demo zweryfikowany':'Profil demo oczekuje na weryfikację'}</p><div class="actions"><button class="primary">Zapisz profil</button>${!data.verified?'<button type="button" onclick="go(\'Weryfikacja\')">Weryfikuj demo</button>':''}</div></form></section>`}
+function dashboardMarkup(){
+ const own=data.events.filter(e=>e.owner).sort((a,b)=>a.date.localeCompare(b.date));
+ const joined=data.events.filter(e=>data.registrations[e.id]&&accessAllowed(e)).sort((a,b)=>a.date.localeCompare(b.date));
+ const future=[...new Map([...own,...joined].filter(e=>!e.cancelled&&!e.completed&&new Date(e.date)>new Date()).map(e=>[e.id,e])).values()].sort((a,b)=>a.date.localeCompare(b.date));
+ const reserve=joined.filter(e=>data.registrations[e.id]==='waitlisted').length;
+ let content='';
+ if(!data.profile)return `<div class="heading"><div><h1>Twój pulpit</h1><p>Twoje wydarzenia, znajomi i wspólne plany w jednym miejscu.</p></div></div>${auth()}`;
+ const tabs=[['overview','Przegląd'],['organize','Organizuję'],['joined','Moje zapisy'],['friends','Znajomi'],['chats','Rozmowy'],['profile','Profil i avatar']];
+ if(hubTab==='organize')content=hubList(own,'Wydarzenia, które organizujesz','Masz pomysł na spotkanie? Utwórz swoje pierwsze wydarzenie.')+`<section class="panel hub-list"><h3>Przećwicz organizowanie</h3><p class="note">Przykładowe wydarzenie z fikcyjnymi uczestnikami i rezerwą.</p><button onclick="seedOrganizerDemo()">Otwórz scenariusz organizatora</button></section>`;
+ else if(hubTab==='joined')content=hubList(joined,'Twoje zapisy i rezerwa','Nie masz jeszcze zapisów. Wybierz aktywność dla siebie.');
+ else if(hubTab==='friends')content=hubFriends();
+ else if(hubTab==='profile')content=hubProfile();
+ else content=`<div class="hub-counts">${[['Organizuję',own.length,'organize'],['Moje zapisy',joined.length,'joined'],['Na rezerwie',reserve,'joined'],['Znajomi demo',(typeof socialFriendCount==='function'?socialFriendCount():hubState.friends.length),'friends']].map(([label,n,tab])=>`<button onclick="openHub('${tab}')"><span>${label}</span><strong>${n}</strong><small>Otwórz →</small></button>`).join('')}</div><div class="hub-columns"><section class="panel hub-next"><span class="eyebrow">TWÓJ NAJBLIŻSZY PLAN</span><h2>${future.length?esc(future[0].title):'Dobry moment na wspólny ruch'}</h2><p>${future.length?`${esc(future[0].town)} · ${new Date(future[0].date).toLocaleString('pl-PL',{day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})}`:'Znajdź spotkanie w okolicy lub zaproś innych na własne.'}</p>${future.length?`<p class="status">${status(future[0])}</p><button class="primary" onclick="detail(${future[0].id})">Zobacz spotkanie →</button>`:'<button class="primary" onclick="go(\'Odkrywaj\')">Znajdź aktywność →</button>'}</section><section class="panel hub-shortcuts"><h2>Pod ręką</h2><button onclick="calendarOwn=true;go('Kalendarz')">▦ Kalendarz moich zapisów <span>→</span></button><button onclick="go('Statystyki')">◷ Moja aktywność i historia <span>→</span></button><button onclick="invitationExample()">✉ Zaproszenie — scenariusz demo <span>→</span></button><button onclick="go('Zgłoszenia')">◎ Moje zgłoszenia demo <span>→</span></button></section></div>${hubList(future.slice(0,4),'Nadchodzące: organizuję i uczestniczę','Tutaj pojawią się Twoje najbliższe spotkania.')}`;
+ return `<section class="hub-hero"><div class="hub-identity"><button class="hub-avatar" onclick="openHub('profile')" aria-label="Zmień avatar">${hubAvatarMarkup()}</button><div><span class="eyebrow">TWÓJ PULPIT</span><h1>Cześć, ${esc(data.profile.name)}!</h1><p>${esc(data.profile.town)} · Twoje miejsce we wspólnych planach.</p></div></div><div class="actions"><button class="primary" onclick="openEventEditor()">＋ Dodaj wydarzenie</button><button onclick="go('Kalendarz')">▦ Kalendarz</button></div><span class="hub-hero-mark" aria-hidden="true">✳</span></section><nav class="hub-tabs" aria-label="Sekcje pulpitu">${tabs.map(([id,label])=>`<button aria-current="${hubTab===id?'page':'false'}" onclick="openHub('${id}')">${label}</button>`).join('')}</nav><div class="hub-content">${content}</div>`;
+}
+const dashboardPriorGo=go;go=function(p){if(p==='Organizuję'){hubTab='organize';p='Pulpit'}else if(p==='Konto'){hubTab='profile';p='Pulpit'}dashboardPriorGo(p)};
+const dashboardPriorRender=render;render=function(){dashboardPriorRender();document.querySelectorAll('#nav button').forEach(b=>{if(b.textContent.includes('Organizuję'))b.remove()});if(page!=='Pulpit')return;const banner=$('.demo-banner')?.outerHTML||'';$('#app').innerHTML=banner+dashboardMarkup();bindForms();const form=$('#hubFriendForm');if(form)form.onsubmit=e=>{e.preventDefault();const name=form.elements.friend.value.trim(),error=$('#hubFriendError');if(!name||name.length>40){error.textContent='Wpisz od 1 do 40 znaków, nie same spacje.';form.elements.friend.focus();return}if(hubState.friends.some(x=>x.toLocaleLowerCase('pl')===name.toLocaleLowerCase('pl'))){error.textContent='Ta osoba jest już na liście demo.';return}if(hubState.friends.length>=30){error.textContent='Lista demo mieści maksymalnie 30 osób.';return}hubState.friends.push(name);saveHub();render();notice('Dodano fikcyjny kontakt lokalnie. Nic nie wysłano.')}};
+const dashboardPriorReset=resetDemo;resetDemo=function(){hubPhotoRequest++;hubState={avatar:'AR',photo:'',friends:[]};hubTab='overview';saveHub();dashboardPriorReset()};
+render();
+
+
+
+
